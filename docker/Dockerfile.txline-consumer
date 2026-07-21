@@ -1,0 +1,38 @@
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat openssl && npm install -g turbo
+
+FROM base AS deps
+WORKDIR /app
+COPY package.json package-lock.json* turbo.json tsconfig.base.json ./
+COPY services/txline-consumer/package.json ./services/txline-consumer/
+COPY packages/shared-types/package.json ./packages/shared-types/
+COPY packages/shared-utils/package.json ./packages/shared-utils/
+COPY packages/shared-config/package.json ./packages/shared-config/
+COPY packages/db/package.json ./packages/db/
+RUN npm ci || npm install
+
+FROM base AS prisma
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY apps/api/prisma ./apps/api/prisma
+COPY packages/db ./packages/db
+RUN cd packages/db && npx prisma generate --schema=../../apps/api/prisma/schema.prisma
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=prisma /app/packages/db/generated ./packages/db/generated
+COPY . .
+RUN npm run build --workspace=packages/shared-types && \
+    npm run build --workspace=packages/shared-utils && \
+    npm run build --workspace=packages/shared-config && \
+    turbo run build --filter=txline-consumer
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/services/txline-consumer/dist ./dist
+COPY --from=builder /app/packages/db/generated ./packages/db/generated
+EXPOSE 4001
+CMD ["node", "dist/main.js"]
