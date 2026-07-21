@@ -1,0 +1,22 @@
+{
+  "name": "@arena/scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "type-check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@arena/db": "*",
+    "@arena/shared-config": "*",
+    "@arena/shared-types": "*",
+    "@arena/shared-utils": "*",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
+
