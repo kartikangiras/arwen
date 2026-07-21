@@ -1,0 +1,6 @@
+-- No-op migration.
+--
+-- This migration previously targeted legacy lower-case tables from an older
+-- schema draft ("trades", "matches", "events"). The current Prisma schema for
+-- Arwen already stores signal attribution on the canonical "Bet" and
+-- "DecisionLog" models, so there is no SQL change to apply here.

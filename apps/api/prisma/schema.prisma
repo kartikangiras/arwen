@@ -1,0 +1,286 @@
+// ─── Arwen — World Cup AI Agent Arena (agents.md §6) ─────────────
+// Single shared LLM key (OPENAI_API_KEY) drives all 7 agents;
+// behaviour is differentiated purely via PromptTemplate strategy prompts (§9).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../packages/db/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── AGENTS (maps to Account in Hyper-Alpha-Arena) ────────────────
+model Agent {
+  id                 Int      @id @default(autoincrement())
+  name               String   @unique
+  slug               String   @unique
+  model              String   @default("gpt-4o")
+  baseUrl            String   @default("https://api.openai.com/v1")
+  apiKey             String?
+  strategy           String
+  avatarPresetId     Int?
+
+  initialCapital     Decimal  @default(10000)
+  currentCash        Decimal  @default(10000)
+  frozenCash         Decimal  @default(0)
+
+  isActive           Boolean  @default(true)
+  autoTradingEnabled Boolean  @default(true)
+  showOnDashboard    Boolean  @default(true)
+  maxStakePercent    Float    @default(10)
+  maxOpenBets        Int      @default(5)
+
+  bets               Bet[]
+  decisionLogs       DecisionLog[]
+  strategyConfig     StrategyConfig?
+  promptBinding      PromptBinding?
+  snapshots          BankrollSnapshot[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// ─── BETS (maps to Order in Hyper-Alpha-Arena) ────────────────────
+model Bet {
+  id              Int       @id @default(autoincrement())
+  agentId         Int
+  agent           Agent     @relation(fields: [agentId], references: [id])
+  fixtureId       Int
+  fixture         Fixture   @relation(fields: [fixtureId], references: [id])
+
+  betNo           String    @unique
+  market          String
+  selection       String
+  side            String
+
+  odds            Float
+  stake           Decimal
+  potentialProfit Decimal
+  potentialLoss   Decimal
+
+  status          String    @default("open")
+  result          String?
+  settledAt       DateTime?
+  realizedPnl     Decimal?
+
+  confidence      Float?
+  signalType      String?
+  decisionLogId   Int?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([agentId, status])
+  @@index([fixtureId])
+}
+
+// ─── FIXTURES (maps to CryptoKline / market data) ─────────────────
+model Fixture {
+  id              Int       @id @default(autoincrement())
+  txlineFixtureId String    @unique
+  tournamentId    Int
+  tournament      Tournament @relation(fields: [tournamentId], references: [id])
+
+  teamA           String
+  teamB           String
+  teamACode       String
+  teamBCode       String
+
+  stage           String
+  venue           String?
+  kickoff         DateTime
+
+  status          String    @default("scheduled")
+  scoreA          Int       @default(0)
+  scoreB          Int       @default(0)
+  currentMinute   Int?
+  currentPeriod   Int       @default(0)
+
+  teamAFifaRank   Int?
+  teamBFifaRank   Int?
+  teamAForm       String?
+  teamBForm       String?
+
+  bets            Bet[]
+  oddsHistory     OddsSnapshot[]
+  events          MatchEvent[]
+  signals         Signal[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tournamentId])
+}
+
+// ─── ODDS SNAPSHOTS (maps to CryptoPrice ticks) ───────────────────
+model OddsSnapshot {
+  id        Int      @id @default(autoincrement())
+  fixtureId Int
+  fixture   Fixture  @relation(fields: [fixtureId], references: [id])
+  source    String   @default("txline")
+
+  market    String
+  teamAOdds Float
+  drawOdds  Float?
+  teamBOdds Float
+  allOutcomes Json?
+
+  timestamp DateTime
+
+  @@unique([fixtureId, source, market, timestamp])
+  @@index([fixtureId, timestamp])
+}
+
+// ─── MATCH EVENTS (from TxLINE scores feed) ───────────────────────
+model MatchEvent {
+  id          Int      @id @default(autoincrement())
+  fixtureId   Int
+  fixture     Fixture  @relation(fields: [fixtureId], references: [id])
+
+  eventType   String
+  minute      Int
+  period      Int
+  team        String
+  player      String?
+  description String?
+  statKey     String?
+
+  occurredAt  DateTime @default(now())
+
+  @@index([fixtureId, minute])
+}
+
+// ─── SIGNALS ──────────────────────────────────────────────────────
+model Signal {
+  id          Int      @id @default(autoincrement())
+  fixtureId   Int
+  fixture     Fixture  @relation(fields: [fixtureId], references: [id])
+
+  type        String
+  severity    String
+  description String
+  metadata    Json?
+
+  triggeredAt DateTime @default(now())
+
+  @@index([fixtureId, type])
+  @@index([triggeredAt])
+}
+
+// ─── DECISION LOGS (maps to AIDecisionLog) ────────────────────────
+model DecisionLog {
+  id              Int      @id @default(autoincrement())
+  agentId         Int
+  agent           Agent    @relation(fields: [agentId], references: [id])
+
+  decisionTime    DateTime @default(now())
+  reasoning       String   @db.Text
+  operation       String
+  fixtureId       Int?
+  market          String?
+  selection       String?
+
+  stakePortion    Float
+  confidence      Float
+  totalBankroll   Decimal
+
+  executed        Boolean  @default(false)
+  betId           Int?
+  signalType      String?
+
+  promptSnapshot    String? @db.Text
+  reasoningSnapshot String? @db.Text
+  decisionSnapshot  String? @db.Text
+
+  createdAt       DateTime @default(now())
+
+  @@index([agentId, decisionTime])
+}
+
+// ─── BANKROLL SNAPSHOTS ───────────────────────────────────────────
+model BankrollSnapshot {
+  id            Int      @id @default(autoincrement())
+  agentId       Int
+  agent         Agent    @relation(fields: [agentId], references: [id])
+
+  totalBankroll Decimal
+  cash          Decimal
+  openBetsValue Decimal
+  unrealizedPnl Decimal
+  snapshotTime  DateTime
+
+  @@index([agentId, snapshotTime])
+}
+
+// ─── STRATEGY CONFIG ──────────────────────────────────────────────
+model StrategyConfig {
+  id              Int      @id @default(autoincrement())
+  agentId         Int      @unique
+  agent           Agent    @relation(fields: [agentId], references: [id])
+
+  triggerInterval Int      @default(300)
+  signalPoolIds   String?
+  enabled         Boolean  @default(true)
+  scheduledTrigger Boolean @default(true)
+  lastTriggerAt   DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── PROMPT TEMPLATES ─────────────────────────────────────────────
+model PromptTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String?
+  content     String   @db.Text
+  category    String   @default("default")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bindings    PromptBinding[]
+}
+
+model PromptBinding {
+  id               Int            @id @default(autoincrement())
+  agentId          Int            @unique
+  agent            Agent          @relation(fields: [agentId], references: [id])
+  promptTemplateId Int
+  promptTemplate   PromptTemplate @relation(fields: [promptTemplateId], references: [id])
+
+  createdAt        DateTime       @default(now())
+}
+
+// ─── TOURNAMENT ───────────────────────────────────────────────────
+model Tournament {
+  id          Int       @id @default(autoincrement())
+  name        String
+  year        Int
+  hostCountry String
+  startDate   DateTime
+  endDate     DateTime
+  status      String    @default("upcoming")
+  fixtures    Fixture[]
+  createdAt   DateTime  @default(now())
+}
+
+// ─── NEWS ─────────────────────────────────────────────────────────
+model NewsItem {
+  id             Int      @id @default(autoincrement())
+  title          String
+  summary        String?
+  source         String
+  url            String?
+  relevance      String?
+  sentiment      String?
+  aiClassification String?
+  publishedAt    DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([publishedAt])
+}
