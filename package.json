@@ -1,0 +1,49 @@
+{
+  "name": "arwen",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "npm@11.6.1",
+  "description": "Arwen — World Cup AI Agent Arena. Seven AI agents trade virtual capital on live FIFA World Cup prediction markets.",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*",
+    "scripts"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "dev:docker": "docker compose up -d postgres redis",
+    "db:init": "npm run db:generate && npm run db:push && npm run seed:agents",
+    "dev:backend": "npm run db:init && concurrently \"npm run dev --workspace=apps/api\" \"npm run dev --workspace=services/agent-runtime\" \"npm run dev --workspace=services/event-worker\" \"npm run mock:txline\" \"npm run dev --workspace=services/txline-consumer\"",
+    "dev:frontend": "npm run dev --workspace=apps/web",
+    "db:push": "npx prisma db push --schema=apps/api/prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema=apps/api/prisma/schema.prisma",
+    "db:generate": "npx prisma generate --schema=apps/api/prisma/schema.prisma",
+    "db:studio": "npx prisma studio --schema=apps/api/prisma/schema.prisma",
+    "seed:agents": "tsx scripts/seed-agents.ts",
+    "mock:txline": "tsx scripts/mock-txline.ts",
+    "simulate:match": "tsx scripts/simulate-match.ts",
+    "reset:arena": "tsx scripts/reset-arena.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "concurrently": "^9.0.0",
+    "prettier": "^3.2.0",
+    "tsx": "^4.7.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0"
+  }
+}

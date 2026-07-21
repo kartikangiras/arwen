@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+dist
+.next
+.turbo
+coverage
+
+# logs
+*.log
+npm-debug.log*
+
+# env
+.env
+.env.example
+.env.local
+.env.*.local
+
+# docker volumes
+postgres_data
+redis_data
+
+# misc
+.DS_Store
+*.tsbuildinfo
+
